@@ -1,49 +1,93 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
 
-/**
- * Taste Battles – Clickable UX Prototype (v2 + patch)
- * - Button: inline styles (no dynamic Tailwind)
- * - Timer: reset when `running` starts to avoid overlap
- * - TrackPanel: robust YouTube ID parsing (youtube.com & youtu.be)
- * - Keeps all your v2 behavior (Start Bracket, Sample Deck, etc.)
- */
+/** ------------------------------------------------------------------------
+ * Supabase client
+ * --------------------------------------------------------------------- */
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: { persistSession: true, detectSessionInUrl: true, autoRefreshToken: true },
+});
 
-// ---- Design Tokens (Figma-ready) -------------------------------------------
+/** ------------------------------------------------------------------------
+ * Design Tokens — Ethereal Teal + Warm Copper
+ * --------------------------------------------------------------------- */
 const TOKENS = {
   fontFamily:
     'Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, Ubuntu, Cantarell, Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji"',
   colors: {
-    primary: "#7C3AED",
-    bg: "#111827",
-    surface: "#1F2937",
-    text: "#F9FAFB",
+    // Base & Surfaces
+    bg: "#0F1518",
+    surface: "#161F22",
+    surfaceElev: "#1B2427",
+    border: "rgba(209,232,226,0.14)",
+    // Text
+    text: "#ECF3F3",
+    muted: "#96A7A7",
+    // Brand & Accents
+    primary: "#116466",
+    primaryAlt: "#1CC9B6",
+    accent: "#D9B08C",
+    accentSoft: "#FFCB9A",
+    info: "#D1E8E2",
     success: "#10B981",
-    error: "#EF4444",
-    warning: "#F59E0B",
-    info: "#60A5FA",
-    muted: "#6B7280",
-    border: "#374151",
-    overlay: "rgba(17,24,39,0.8)",
+    error: "#EF5959",
+    warning: "#E8B25C",
+    overlay: "rgba(9,14,16,0.72)",
   },
-  radius: { sm: "8px", md: "12px", lg: "16px", xl: "20px", full: "999px" },
+  radius: { sm: "10px", md: "14px", lg: "18px", xl: "22px", full: "999px" },
   shadow: {
-    soft: "0 6px 24px rgba(0,0,0,0.25)",
-    lift: "0 10px 30px rgba(0,0,0,0.35)",
+    soft: "0 10px 32px rgba(0,0,0,0.28)",
+    lift: "0 14px 40px rgba(0,0,0,0.34)",
+    glowTeal:
+      "0 0 0 1px rgba(28,201,182,0.18), 0 6px 20px rgba(28,201,182,0.12)",
+    glowCopper:
+      "0 0 0 1px rgba(217,176,140,0.20), 0 6px 18px rgba(217,176,140,0.14)",
+  },
+  gradients: {
+    aura:
+      "radial-gradient(1200px 600px at 20% -10%, rgba(17,100,102,0.22) 0%, rgba(17,21,24,0) 60%)",
+    primarySweep: "linear-gradient(90deg, #116466 0%, #1CC9B6 100%)",
+    copperShimmer:
+      "linear-gradient(90deg, rgba(217,176,140,0) 0%, rgba(217,176,140,.35) 50%, rgba(217,176,140,0) 100%)",
+  },
+  motion: {
+    ease: "cubic-bezier(0.22, 0.61, 0.36, 1)",
+    fast: "180ms",
+    medium: "260ms",
+    slow: "340ms",
   },
 };
 
+/** ------------------------------------------------------------------------
+ * Utils
+ * --------------------------------------------------------------------- */
 function cls(...a) {
   return a.filter(Boolean).join(" ");
 }
 
+/** ------------------------------------------------------------------------
+ * Core UI
+ * --------------------------------------------------------------------- */
 function Card({ className = "", children }) {
   return (
     <div
-      className={cls("rounded-2xl p-5", className)}
+      className={cls("rounded-2xl p-5 transition-transform", className)}
       style={{
-        background: TOKENS.colors.surface,
-        boxShadow: TOKENS.shadow.soft,
+        background:
+          "linear-gradient(180deg, rgba(22,31,34,0.86), rgba(22,31,34,0.86))",
+        boxShadow: `${TOKENS.shadow.soft}, ${TOKENS.shadow.glowTeal}`,
         border: `1px solid ${TOKENS.colors.border}`,
+        backdropFilter: "blur(6px)",
+        transform: "translateY(0)",
+        transition: `transform ${TOKENS.motion.medium} ${TOKENS.motion.ease}, box-shadow ${TOKENS.motion.medium} ${TOKENS.motion.ease}`,
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = "translateY(-2px)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = "translateY(0)";
       }}
     >
       {children}
@@ -51,7 +95,6 @@ function Card({ className = "", children }) {
   );
 }
 
-/* ---------- PATCHED BUTTON (no dynamic Tailwind colors) ---------- */
 function Button({
   variant = "primary",
   size = "md",
@@ -70,16 +113,39 @@ function Button({
     lg: "px-5 py-3 text-base",
   };
   const palette = {
-    primary: { bg: TOKENS.colors.primary, fg: TOKENS.colors.text },
-    secondary: { bg: "#2B3442", fg: TOKENS.colors.text },
+    primary: { type: "filled" },
+    secondary: { type: "solid", bg: "#223036", fg: TOKENS.colors.text },
     ghost: {
-      bg: "transparent",
-      fg: TOKENS.colors.text,
+      type: "ghost",
+      fg: TOKENS.colors.info,
       border: TOKENS.colors.border,
     },
-    danger: { bg: TOKENS.colors.error, fg: "#fff" },
+    danger: { type: "solid", bg: TOKENS.colors.error, fg: "#fff" },
   };
+
   const p = palette[variant] ?? palette.primary;
+
+  const style =
+    p.type === "filled"
+      ? {
+          background: TOKENS.gradients.primarySweep,
+          color: TOKENS.colors.text,
+          border: "1px solid rgba(28,201,182,0.35)",
+          boxShadow: TOKENS.shadow.glowTeal,
+          position: "relative",
+          overflow: "hidden",
+        }
+      : p.type === "solid"
+      ? {
+          background: p.bg,
+          color: p.fg,
+          border: `1px solid ${TOKENS.colors.border}`,
+        }
+      : {
+          background: "transparent",
+          color: p.fg,
+          border: `1px solid ${p.border}`,
+        };
 
   return (
     <button
@@ -88,11 +154,24 @@ function Button({
       disabled={disabled || loading}
       className={cls(base, sizes[size], className)}
       style={{
-        background: p.bg,
-        color: p.fg,
-        border: variant === "ghost" ? `1px solid ${p.border}` : undefined,
+        ...style,
         opacity: disabled || loading ? 0.6 : 1,
         cursor: disabled || loading ? "not-allowed" : "pointer",
+        transition: `background ${TOKENS.motion.fast} ${TOKENS.motion.ease}, transform ${TOKENS.motion.fast} ${TOKENS.motion.ease}, box-shadow ${TOKENS.motion.fast} ${TOKENS.motion.ease}`,
+      }}
+      onMouseEnter={(e) => {
+        if (variant !== "primary") return;
+        // copper shimmer sweep
+        const el = e.currentTarget;
+        el.style.backgroundImage = `${TOKENS.gradients.primarySweep}, ${TOKENS.gradients.copperShimmer}`;
+        el.style.backgroundSize = "200% 100%, 200% 100%";
+        el.animate(
+          [
+            { backgroundPosition: "0% 0, -200% 0" },
+            { backgroundPosition: "100% 0, 200% 0" },
+          ],
+          { duration: 1200, iterations: 1, easing: "ease-out" }
+        );
       }}
     >
       {loading && <span className="mr-2">⏳</span>}
@@ -129,9 +208,11 @@ function Input({
         <input
           disabled={disabled}
           type={type}
-          className="w-full rounded-xl bg-[#0F1623] border outline-none focus:ring-2 px-3 py-2 pr-10"
+          className="w-full rounded-xl border outline-none focus:ring-2 px-3 py-2 pr-10"
           style={{
             color: TOKENS.colors.text,
+            background:
+              "linear-gradient(180deg, rgba(15,22,27,0.9), rgba(15,22,27,0.9))",
             borderColor: error ? TOKENS.colors.error : TOKENS.colors.border,
           }}
           placeholder={placeholder}
@@ -217,11 +298,12 @@ function useToasts() {
   return { toasts, push, remove };
 }
 
-/* ---------- PATCHED TIMER ---------- */
+/** ------------------------------------------------------------------------
+ * Timer
+ * --------------------------------------------------------------------- */
 function Timer({ seconds, running, onDone, label }) {
   const [left, setLeft] = useState(seconds);
 
-  // Reset whenever we (re)start the timer
   useEffect(() => {
     if (running) setLeft(seconds);
   }, [seconds, running]);
@@ -258,6 +340,7 @@ function Timer({ seconds, running, onDone, label }) {
           style={{
             width: `${pct}%`,
             background: TOKENS.colors.primary,
+            boxShadow: "0 0 16px rgba(28,201,182,0.22) inset",
             transition: "width 1s linear",
           }}
         />
@@ -266,24 +349,19 @@ function Timer({ seconds, running, onDone, label }) {
   );
 }
 
-// ---- Sample Data -----------------------------------------------------------
+/** ------------------------------------------------------------------------
+ * Sample Data
+ * --------------------------------------------------------------------- */
 const SAMPLE_USERS = [1, 2, 3, 4].map((i) => ({
   id: `u${i}`,
   name: `Test User ${i}`,
   rating: 1200,
   provisional_count: 0,
 }));
-const YT = [
-  "fJ9rUzIMcZQ",
-  "BciS5krYL80",
-  "QkF3oxkcmNs",
-  "1w7OgIMMRc4",
-  "YkgkThdzX-8",
-]; // ids only
+const YT = ["fJ9rUzIMcZQ", "BciS5krYL80", "QkF3oxkcmNs", "1w7OgIMMRc4", "YkgkThdzX-8"];
 function ytThumb(id) {
   return `https://img.youtube.com/vi/${id}/hqdefault.jpg`;
 }
-
 const DEFAULT_DECK = YT.map((id, i) => ({
   title: `Track ${i + 1}`,
   artist: "Example Artist",
@@ -299,8 +377,6 @@ function validateTrackUrl(url) {
     return false;
   }
 }
-
-/* ---------- PATCH: safe YT ID helper ---------- */
 function safeYouTubeId(url, fallbackId) {
   try {
     const u = new URL(url);
@@ -315,8 +391,45 @@ function safeYouTubeId(url, fallbackId) {
   return fallbackId || null;
 }
 
-// ---- App ------------------------------------------------------------------
+/** ------------------------------------------------------------------------
+ * App
+ * --------------------------------------------------------------------- */
 export default function App() {
+  // Auth state
+  const [session, setSession] = useState(null);
+  const [authed, setAuthed] = useState(false);
+  const toasts = useToasts();
+
+  const toast = (title, icon) => toasts.push({ title, icon });
+
+  async function sendMagicLink(email) {
+    try {
+      const { error } = await supabase.auth.signInWithOtp({ email });
+      if (error) throw error;
+      toast("Magic link sent – check your email", "📨");
+      return true;
+    } catch (err) {
+      console.error(err);
+      toast(err.message || "Failed to send magic link", "⚠️");
+      return false;
+    }
+  }
+
+  // ✅ Google OAuth — use Supabase dashboard Site URL (no hardcoded redirectTo)
+  async function signInWithGoogle() {
+    console.log("Starting Google OAuth…");
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      // options: { skipBrowserRedirect: true } // (debug) can inspect data.url then window.location.href = data.url
+    });
+    if (error) toast(error.message, "⚠️");
+  }
+
+  async function realSignOut() {
+    const { error } = await supabase.auth.signOut();
+    if (error) toast(error.message, "⚠️");
+  }
+
   const [route, setRoute] = useState("home");
   const [user, setUser] = useState({
     id: "u1",
@@ -324,7 +437,7 @@ export default function App() {
     rating: 1200,
     provisional_count: 2,
   });
-  const [authed, setAuthed] = useState(false);
+
   const [lobby, setLobby] = useState({
     id: "#ABCD12",
     size: 4,
@@ -333,14 +446,36 @@ export default function App() {
     ready: false,
   });
   const [match, setMatch] = useState(null);
-  const toasts = useToasts();
 
   useEffect(() => {
-    document.body.style.background = TOKENS.colors.bg;
+    document.body.style.background = `${TOKENS.colors.bg}`;
+    document.body.style.backgroundImage = TOKENS.gradients.aura;
     document.body.style.color = TOKENS.colors.text;
     document.body.style.fontFamily = TOKENS.fontFamily;
   }, []);
 
+  // Sync auth
+  useEffect(() => {
+    let mounted = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      setSession(data.session);
+      setAuthed(!!data.session);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      if (!mounted) return;
+      setSession(newSession);
+      setAuthed(!!newSession);
+    });
+    return () => {
+      mounted = false;
+      sub?.subscription?.unsubscribe?.();
+    };
+  }, []);
+
+  /** ---------------------------------------------
+   * Header
+   * ------------------------------------------ */
   const IntegrationTag = ({ label }) => (
     <span
       className="ml-2 text-[10px] px-2 py-0.5 rounded-full"
@@ -354,79 +489,89 @@ export default function App() {
     </span>
   );
 
-  const Header = () => (
-    <div
-      className="sticky top-0 z-30"
-      style={{
-        background:
-          "linear-gradient(180deg, rgba(17,24,39,0.9), rgba(17,24,39,0.6))",
-        backdropFilter: "blur(8px)",
-      }}
-    >
-      <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div
-            className="w-9 h-9 rounded-2xl flex items-center justify-center"
-            style={{ background: TOKENS.colors.primary }}
-          >
-            🎵
-          </div>
-          <div>
-            <div className="text-lg font-semibold">Taste Battles</div>
-            <div className="text-xs opacity-70">Sloppy Songs</div>
-          </div>
-        </div>
-        <nav className="flex items-center gap-2 text-sm">
-          <NavLink
-            label="Home"
-            active={route === "home"}
-            onClick={() => setRoute("home")}
-          />
-          <NavLink
-            label="Leaderboard"
-            active={route === "leaderboard"}
-            onClick={() => setRoute("leaderboard")}
-          />
-          <NavLink
-            label="Profile"
-            active={route === "profile"}
-            onClick={() => setRoute("profile")}
-          />
-          <NavLink
-            label={authed ? "Sign out" : "Sign in"}
-            onClick={() => setRoute("auth")}
-          />
-        </nav>
-      </div>
-    </div>
-  );
   function NavLink({ label, onClick, active }) {
     return (
       <button
         onClick={onClick}
-        className={cls(
-          "px-3 py-1.5 rounded-lg",
-          active ? "bg-[#222A38]" : "hover:bg-[#1A2231]"
-        )}
+        className={cls("px-3 py-1.5 rounded-lg")}
+        style={{
+          border: active ? `1px solid rgba(28,201,182,0.35)` : `1px solid transparent`,
+          background: active ? "rgba(17,100,102,0.12)" : "transparent",
+          transition: `all ${TOKENS.motion.fast} ${TOKENS.motion.ease}`,
+        }}
       >
         {label}
       </button>
     );
   }
 
-  // ---- Screens -------------------------------------------------------------
+  const Header = () => (
+    <div
+      className="sticky top-0 z-30"
+      style={{
+        background:
+          "linear-gradient(180deg, rgba(15,21,24,0.85), rgba(15,21,24,0.60))",
+        backdropFilter: "blur(8px)",
+        borderBottom: `1px solid ${TOKENS.colors.border}`,
+      }}
+    >
+      <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div
+            className="w-9 h-9 rounded-2xl flex items-center justify-center"
+            style={{
+              background: TOKENS.colors.surfaceElev,
+              boxShadow: TOKENS.shadow.glowTeal,
+            }}
+          >
+            🎵
+          </div>
+          <div>
+            <div className="text-lg font-semibold">Taste Battles</div>
+            <div className="text-xs" style={{ color: TOKENS.colors.muted }}>
+              Sloppy Songs
+            </div>
+          </div>
+        </div>
+        <nav className="flex items-center gap-2 text-sm">
+          <NavLink label="Home" active={route === "home"} onClick={() => setRoute("home")} />
+          <NavLink
+            label="Leaderboard"
+            active={route === "leaderboard"}
+            onClick={() => setRoute("leaderboard")}
+          />
+          <NavLink label="Profile" active={route === "profile"} onClick={() => setRoute("profile")} />
+          <NavLink
+            label={authed ? "Sign out" : "Sign in"}
+            onClick={async () => {
+              if (authed) {
+                await realSignOut();
+                toast("Signed out", "👋");
+              } else {
+                setRoute("auth");
+              }
+            }}
+          />
+        </nav>
+      </div>
+    </div>
+  );
+
+  /** ---------------------------------------------
+   * Screens
+   * ------------------------------------------ */
   const Home = () => (
     <div className="max-w-6xl mx-auto px-4 pt-10 pb-24">
-      <div className="grid md:grid-cols-2 gap-8 items-center">
-        <div>
-          <h1 className="text-3xl md:text-4xl font-semibold mb-3">
+      <div className="grid md:grid-cols-2 gap-10 items-center">
+        <div className="text-center md:text-left">
+          <h1 className="text-3xl md:text-4xl font-semibold mb-4">
             Battle your music taste in real time.
           </h1>
-          <p className="opacity-80 mb-6">
-            Four players enter. Submit five songs, face off in a best-of-3 with
-            live voting. Climb the leaderboard with Elo ratings.
+          <p className="opacity-80 mb-7">
+            Four players enter. Submit five songs, face off in a best‑of‑3 with live voting.
+            Climb the leaderboard with Elo ratings.
           </p>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 justify-center md:justify-start">
             <Button
               onClick={() => {
                 if (!authed) {
@@ -464,8 +609,7 @@ export default function App() {
             ))}
           </div>
           <div className="mt-4 text-xs opacity-70">
-            Future section reserved for <b>Playlists</b> management in
-            sidebar/navigation.
+            Future section reserved for <b>Playlists</b> management in sidebar/navigation.
           </div>
         </Card>
       </div>
@@ -477,81 +621,70 @@ export default function App() {
     const [sent, setSent] = useState(false);
     const [err, setErr] = useState("");
     return (
-      <div className="max-w-md mx-auto px-4 pt-12 pb-24">
-        <Card>
-          <div className="text-xl font-semibold mb-1">Sign in</div>
-          <div className="text-sm opacity-80 mb-4">
-            Magic link or social. Guest is allowed.
-          </div>
-          {!sent ? (
-            <div className="space-y-3">
-              <Input
-                label="Email"
-                placeholder="you@domain.com"
-                value={email}
-                onChange={setEmail}
-                error={err}
-              />
-              <div className="flex items-center gap-2">
-                <Button
-                  onClick={() => {
-                    const valid = /.+@.+\..+/.test(email);
-                    if (!valid) {
-                      setErr("Invalid email");
-                      toasts.push({ title: "Invalid email", icon: "⚠️" });
-                      return;
-                    }
-                    setErr("");
-                    setSent(true);
-                    toasts.push({ title: "Check your email", icon: "📨" });
-                  }}
-                >
-                  Send magic link
-                </Button>
-                <IntegrationTag label="auth:magic_link" />
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    setAuthed(true);
-                    setRoute("home");
-                    toasts.push({ title: "Signed in with Google", icon: "✅" });
-                  }}
-                >
-                  Sign in with Google
-                </Button>
-                <IntegrationTag label="auth:oauth_google" />
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setAuthed(true);
-                    setRoute("home");
-                    toasts.push({ title: "Continuing as Guest", icon: "👤" });
-                  }}
-                >
-                  Continue as Guest
-                </Button>
-                <IntegrationTag label="auth:guest" />
-              </div>
+      <div className="min-h-[70vh] flex items-center justify-center px-4 pt-8 pb-24">
+        <div className="w-full max-w-md">
+          <Card>
+            <div className="text-xl font-semibold mb-1">Sign in</div>
+            <div className="text-sm opacity-80 mb-4">
+              Magic link or Google. Guest is allowed.
             </div>
-          ) : (
-            <div className="space-y-3">
-              <Badge tone="info">Magic link sent</Badge>
-              <div className="text-sm">Check your email to continue.</div>
-              <Button
-                onClick={() => {
-                  setAuthed(true);
-                  setRoute("home");
-                }}
-              >
-                Back to Home
-              </Button>
-            </div>
-          )}
-        </Card>
+            {!sent ? (
+              <div className="space-y-3">
+                <Input
+                  label="Email"
+                  placeholder="you@domain.com"
+                  value={email}
+                  onChange={setEmail}
+                  error={err}
+                  helper="We’ll email you a sign-in link"
+                />
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={async () => {
+                      const valid = /.+@.+\..+/.test(email);
+                      if (!valid) {
+                        setErr("Invalid email");
+                        toasts.push({ title: "Invalid email", icon: "⚠️" });
+                        return;
+                      }
+                      setErr("");
+                      const ok = await sendMagicLink(email);
+                      if (ok) setSent(true);
+                    }}
+                  >
+                    Send magic link
+                  </Button>
+                  <IntegrationTag label="auth:magic_link" />
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="secondary" onClick={signInWithGoogle}>
+                    Sign in with Google
+                  </Button>
+                  <IntegrationTag label="auth:oauth_google" />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setAuthed(true);
+                      setRoute("home");
+                      toasts.push({ title: "Continuing as Guest", icon: "👤" });
+                    }}
+                  >
+                    Continue as Guest
+                  </Button>
+                  <IntegrationTag label="auth:guest" />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <Badge tone="info">Magic link sent</Badge>
+                <div className="text-sm">Check your email to continue.</div>
+                <Button onClick={() => setRoute("home")}>Back to Home</Button>
+              </div>
+            )}
+          </Card>
+        </div>
       </div>
     );
   };
@@ -610,17 +743,13 @@ export default function App() {
         <div className="flex items-center gap-2">
           <Button
             variant="secondary"
-            onClick={() =>
-              toasts.push({ title: "Connecting to server…", icon: "🌐" })
-            }
+            onClick={() => toasts.push({ title: "Connecting to server…", icon: "🌐" })}
           >
             Reconnect
           </Button>
           <Button
             variant="ghost"
-            onClick={() =>
-              toasts.push({ title: "Lobby not available", icon: "⚠️" })
-            }
+            onClick={() => toasts.push({ title: "Lobby not available", icon: "⚠️" })}
           >
             Simulate Error
           </Button>
@@ -664,8 +793,8 @@ export default function App() {
         </div>
         <Card>
           <div className="mb-3 text-sm opacity-80">
-            Paste <b>YouTube</b> or <b>Spotify</b> track URLs in all 5 rows. No
-            duplicates. Or use Sample Deck.
+            Paste <b>YouTube</b> or <b>Spotify</b> track URLs in all 5 rows. No duplicates. Or use
+            Sample Deck.
           </div>
           <div className="space-y-3">
             {rows.map((r, i) => (
@@ -678,17 +807,11 @@ export default function App() {
                       update(i, { url: v });
                       const ok = validateTrackUrl(v);
                       setErrors((es) =>
-                        es.map((e, idx) =>
-                          idx === i ? (!ok ? "Invalid track URL" : "") : e
-                        )
+                        es.map((e, idx) => (idx === i ? (!ok ? "Invalid track URL" : "") : e))
                       );
                     }}
                     error={errors[i]}
-                    helper={
-                      !errors[i]
-                        ? "youtube.com / youtu.be / open.spotify.com"
-                        : ""
-                    }
+                    helper={!errors[i] ? "youtube.com / youtu.be / open.spotify.com" : ""}
                     placeholder="https://www.youtube.com/watch?v=… or https://open.spotify.com/track/…"
                   />
                 </div>
@@ -697,9 +820,7 @@ export default function App() {
                     label="Hook start (sec)"
                     type="number"
                     value={r.hook_start_sec}
-                    onChange={(v) =>
-                      update(i, { hook_start_sec: Number(v || 0) })
-                    }
+                    onChange={(v) => update(i, { hook_start_sec: Number(v || 0) })}
                     helper="Optional"
                   />
                 </div>
@@ -754,7 +875,7 @@ export default function App() {
     );
   };
 
-  // Match Simulation ---------------------------------------------------------
+  // Match Simulation
   const [mState, setMState] = useState({
     round: 1,
     bestOf: 3,
@@ -849,20 +970,17 @@ export default function App() {
       if (s.votesA > s.votesB) winner = "A";
       else if (s.votesB > s.votesA) winner = "B";
       else winner = "TIE";
-      let scoreA = s.scoreA + (winner === "A" ? 1 : 0);
-      let scoreB = s.scoreB + (winner === "B" ? 1 : 0);
+      const scoreA = s.scoreA + (winner === "A" ? 1 : 0);
+      const scoreB = s.scoreB + (winner === "B" ? 1 : 0);
       const history = [
         ...s.history,
         { round: s.round, votesA: s.votesA, votesB: s.votesB, winner },
       ];
-      let round = s.round + 1;
+      const round = s.round + 1;
       let phase = "results";
       const need = Math.ceil(s.bestOf / 2);
-      if (scoreA >= need || scoreB >= need) {
-        phase = "complete";
-      } else {
-        phase = "playingA";
-      }
+      if (scoreA >= need || scoreB >= need) phase = "complete";
+      else phase = "playingA";
       return {
         ...s,
         history,
@@ -896,26 +1014,10 @@ export default function App() {
           <div className="text-lg font-semibold">
             {m.player_a.name} vs {m.player_b.name}
           </div>
-          <div className="flex items-center gap-2">
-            <Badge tone="neutral">Best of {s.bestOf}</Badge>
-            <Badge tone="info">Round {Math.min(s.round, s.bestOf)}</Badge>
-          </div>
         </div>
         <div className="grid md:grid-cols-2 gap-4">
-          <TrackPanel
-            who="A"
-            deck={m.deck_a}
-            round={s.round}
-            active={s.phase === "playingA"}
-            votes={s.votesA}
-          />
-          <TrackPanel
-            who="B"
-            deck={m.deck_b}
-            round={s.round}
-            active={s.phase === "playingB"}
-            votes={s.votesB}
-          />
+          <TrackPanel who="A" deck={m.deck_a} round={s.round} active={s.phase === "playingA"} votes={s.votesA} />
+          <TrackPanel who="B" deck={m.deck_b} round={s.round} active={s.phase === "playingB"} votes={s.votesB} />
         </div>
         <div className="mt-4 grid md:grid-cols-3 gap-4">
           <Card>
@@ -972,21 +1074,8 @@ export default function App() {
             </div>
           </Card>
           <Card>
-            <div className="text-sm opacity-70 mb-2">Round History</div>
-            <div className="space-y-1 text-sm">
-              {s.history.map((h, i) => (
-                <div key={i} className="flex items-center justify-between">
-                  <span>R{i + 1}</span>
-                  <span>
-                    A {h.votesA} / B {h.votesB}
-                  </span>
-                  <span>{h.winner}</span>
-                </div>
-              ))}
-              {s.history.length === 0 && (
-                <div className="opacity-60">No rounds yet.</div>
-              )}
-            </div>
+            <div className="text-sm opacity-70 mb-2">Round</div>
+            <div className="text-2xl">Round {Math.min(s.round, s.bestOf)}</div>
           </Card>
         </div>
         {s.phase === "results" && (
@@ -1027,10 +1116,7 @@ export default function App() {
             <Card>
               <div className="text-2xl font-semibold mb-2">Match Complete</div>
               <div className="mb-2">
-                Winner:{" "}
-                {mState.scoreA > mState.scoreB
-                  ? m.player_a.name
-                  : m.player_b.name}
+                Winner: {mState.scoreA > mState.scoreB ? m.player_a.name : m.player_b.name}
               </div>
               <div className="mb-4 text-sm opacity-80">
                 Elo Δ +12 / −8 (K=40 provisional &lt; 10 matches)
@@ -1049,10 +1135,7 @@ export default function App() {
           </div>
         )}
         {mState.phase === "voting" && (
-          <div
-            className="fixed inset-0 flex items-center justify-center"
-            style={{ background: TOKENS.colors.overlay }}
-          >
+          <div className="fixed inset-0 flex items-center justify-center" style={{ background: TOKENS.colors.overlay }}>
             <Card className="max-w-md w-[90%] text-center">
               <div className="text-xl font-semibold mb-2">Vote Now!</div>
               <div className="opacity-80 mb-4">
@@ -1071,7 +1154,6 @@ export default function App() {
     );
   };
 
-  /* ---------- PATCHED TrackPanel uses safeYouTubeId ---------- */
   function TrackPanel({ who, deck, round, active, votes }) {
     const idx = Math.min(round - 1, deck.length - 1);
     const t = deck[idx];
@@ -1081,32 +1163,31 @@ export default function App() {
     return (
       <Card>
         <div className="flex items-center justify-between mb-3">
-          <div className="text-sm opacity-70">Player {who}</div>
-          <Badge tone={active ? "info" : "neutral"}>
-            {active ? "Playing" : "Standby"}
-          </Badge>
+          <div className="text-sm" style={{ color: TOKENS.colors.muted }}>
+            Player {who}
+          </div>
+          <Badge tone={active ? "info" : "neutral"}>{active ? "Playing" : "Standby"}</Badge>
         </div>
         <div className="flex gap-4 items-center">
-          <div className="w-28 h-16 rounded-lg overflow-hidden bg-black flex-shrink-0">
+          <div className="w-28 h-16 rounded-lg overflow-hidden bg-black flex-shrink-0 relative">
             {thumb ? (
-              <img
-                src={thumb}
-                alt="thumb"
-                className="w-full h-full object-cover"
-              />
+              <>
+                <img src={thumb} alt="thumb" className="w-full h-full object-cover" />
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background:
+                      "linear-gradient(180deg, rgba(17,100,102,0) 0%, rgba(17,100,102,0.16) 100%)",
+                  }}
+                />
+              </>
             ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                🎧
-              </div>
+              <div className="w-full h-full flex items-center justify-center">🎧</div>
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="truncate font-medium">
-              {t.title || `Track ${idx + 1}`}
-            </div>
-            <div className="text-sm opacity-70 truncate">
-              {t.artist || "Artist"}
-            </div>
+            <div className="truncate font-medium">{t.title || `Track ${idx + 1}`}</div>
+            <div className="text-sm opacity-70 truncate">{t.artist || "Artist"}</div>
             <div className="text-xs opacity-70 mt-1">
               {t.source} • hook @{t.hook_start_sec || 0}s
             </div>
@@ -1120,9 +1201,7 @@ export default function App() {
   const Results = () => (
     <div className="max-w-3xl mx-auto px-4 pt-12 pb-24">
       <Card>
-        <div className="text-2xl font-semibold mb-2">
-          Winner: Test User 1 🎉
-        </div>
+        <div className="text-2xl font-semibold mb-2">Winner: Test User 1 🎉</div>
         <div className="text-sm opacity-80 mb-4">Elo change +12 / −8</div>
         <div className="flex gap-2">
           <Button onClick={() => setRoute("home")}>Back to Home</Button>
@@ -1141,10 +1220,7 @@ export default function App() {
           <div>
             <div className="text-sm opacity-70">Rating</div>
             <div className="text-3xl font-semibold">
-              {user.rating}{" "}
-              <span className="text-sm opacity-60">
-                ({user.provisional_count}/10)
-              </span>
+              {user.rating} <span className="text-sm opacity-60">({user.provisional_count}/10)</span>
             </div>
           </div>
           <Badge tone="warning">Provisional</Badge>
@@ -1162,9 +1238,7 @@ export default function App() {
                 background: "#0F1623",
               }}
             >
-              <span>
-                vs Test User {i + 1} • 2025-08-0{i} • Win
-              </span>
+              <span>vs Test User {i + 1} • 2025-08-0{i} • Win</span>
               <span className="opacity-80">+12</span>
             </div>
           ))}
@@ -1187,18 +1261,10 @@ export default function App() {
       <div className="flex items-center justify-between">
         <div className="text-xl font-semibold">Leaderboard</div>
         <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => toasts.push({ title: "Global", icon: "🌍" })}
-          >
+          <Button size="sm" variant="secondary" onClick={() => toasts.push({ title: "Global", icon: "🌍" })}>
             Global
           </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => toasts.push({ title: "Weekly", icon: "📅" })}
-          >
+          <Button size="sm" variant="secondary" onClick={() => toasts.push({ title: "Weekly", icon: "📅" })}>
             Weekly
           </Button>
         </div>
@@ -1251,11 +1317,8 @@ export default function App() {
           <div className="space-y-2">
             <div className="font-medium">Inputs</div>
             <Input label="Label" placeholder="Type…" helper="Helper text" />
-            <Input
-              label="With error"
-              placeholder="Type…"
-              error="Invalid value"
-            />
+            {/* Fixed broken JSX here */}
+            <Input label="With error" placeholder="Type…" error="Invalid value" />
           </div>
           <div className="space-y-2">
             <div className="font-medium">Badges</div>
@@ -1268,12 +1331,7 @@ export default function App() {
           </div>
           <div className="space-y-2">
             <div className="font-medium">Toast</div>
-            <Button
-              variant="secondary"
-              onClick={() =>
-                toasts.push({ title: "Example toast", icon: "🔔" })
-              }
-            >
+            <Button variant="secondary" onClick={() => toasts.push({ title: "Example toast", icon: "🔔" })}>
               Show Toast
             </Button>
           </div>
@@ -1291,36 +1349,23 @@ export default function App() {
       <Card>
         <div className="text-xl font-semibold mb-2">Handoff Notes</div>
         <ul className="text-sm list-disc pl-5 space-y-1 opacity-90">
+          <li>Real‑time via <b>Socket.IO</b> on Node server (not serverless).</li>
           <li>
-            Real-time via <b>Socket.IO</b> on Node server (not serverless).
+            Client events: <code>lobby:create</code>, <code>lobby:join</code>, <code>lobby:started</code>,{" "}
+            <code>deck:submit</code>, <code>match:ready</code>, <code>round:start</code>, <code>round:voting</code>,{" "}
+            <code>vote:submit</code>, <code>round:complete</code>, <code>match:complete</code>.
           </li>
-          <li>
-            Client events: <code>lobby:create</code>, <code>lobby:join</code>,{" "}
-            <code>lobby:started</code>, <code>deck:submit</code>,{" "}
-            <code>match:ready</code>, <code>round:start</code>,{" "}
-            <code>round:voting</code>, <code>vote:submit</code>,{" "}
-            <code>round:complete</code>, <code>match:complete</code>.
-          </li>
-          <li>
-            MVP audio: YouTube embeds + simulated timers; Spotify Web Playback
-            later.
-          </li>
-          <li>
-            Elo: K=40 provisional (&lt;10), K=32 otherwise. Show deltas on
-            results and profile.
-          </li>
+          <li>MVP audio: YouTube embeds + simulated timers; Spotify Web Playback later.</li>
+          <li>Elo: K=40 provisional (&lt;10), K=32 otherwise. Show deltas on results and profile.</li>
           <li>Integration tags in UI show where API hooks in.</li>
-          <li>
-            Playlists: reserved left nav slot & route for future management.
-          </li>
+          <li>Playlists: reserved left nav slot & route for future management.</li>
         </ul>
       </Card>
       <Card>
         <div className="text-lg font-semibold mb-2">Navigation Map</div>
         <div className="text-sm opacity-90">
-          Home → (Sign In or Guest) → Find Match → Lobby (players join until 4)
-          →<b> Start Bracket</b> → Deck Submission → Match View (R1/R2/R3,
-          tiebreakers) → Match Complete → Back Home / Profile → Leaderboard.
+          Home → (Sign In or Guest) → Find Match → Lobby (players join until 4) → <b>Start Bracket</b> → Deck
+          Submission → Match View (R1/R2/R3, tiebreakers) → Match Complete → Back Home / Profile → Leaderboard.
         </div>
       </Card>
       <Card>
@@ -1349,126 +1394,40 @@ export default function App() {
     </div>
   );
 
-  const DebugPanel = () => {
-    const [open, setOpen] = useState(true);
-    if (route !== "match") return null;
-    return (
-      <div className="fixed right-4 bottom-4 z-40">
-        <div className="mb-2 flex justify-end">
-          <button
-            onClick={() => setOpen((o) => !o)}
-            className="w-10 h-10 rounded-full flex items-center justify-center text-xl"
-            style={{
-              background: TOKENS.colors.primary,
-              boxShadow: TOKENS.shadow.lift,
-            }}
-          >
-            ⚙️
-          </button>
-        </div>
-        {open && (
-          <Card className="w-80">
-            <div className="text-sm font-semibold mb-2">Debug</div>
-            <div className="grid grid-cols-2 gap-2 mb-2">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setMState((s) => ({ ...s, phase: "playingA" }))}
-              >
-                Playing A
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setMState((s) => ({ ...s, phase: "playingB" }))}
-              >
-                Playing B
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setMState((s) => ({ ...s, phase: "voting" }))}
-              >
-                Voting
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => setMState((s) => ({ ...s, phase: "results" }))}
-              >
-                Results
-              </Button>
-            </div>
-            <div className="grid grid-cols-3 gap-2 mb-2">
-              <Button size="sm" onClick={() => vote("A")}>
-                +A
-              </Button>
-              <Button size="sm" onClick={() => vote("B")}>
-                +B
-              </Button>
-              <Button
-                size="sm"
-                variant="danger"
-                onClick={() =>
-                  setMState((s) => ({ ...s, votesA: 0, votesB: 0 }))
-                }
-              >
-                Clear
-              </Button>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Button size="sm" onClick={finalizeRound}>
-                Next Round
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setMState((s) => ({ ...s, phase: "complete" }))}
-              >
-                Complete
-              </Button>
-            </div>
-          </Card>
-        )}
-      </div>
-    );
-  };
-
-  const Footer = () => (
+  /** ---------------------------------------------
+   * Player Bar (sticky)
+   * ------------------------------------------ */
+  const PlayerBar = () => (
     <div
       className="fixed inset-x-0 bottom-0 z-20"
       style={{
         background:
-          "linear-gradient(0deg, rgba(17,24,39,0.95), rgba(17,24,39,0.7))",
+          "linear-gradient(0deg, rgba(15,21,24,0.95), rgba(15,21,24,0.7))",
         borderTop: `1px solid ${TOKENS.colors.border}`,
+        backdropFilter: "blur(6px)",
       }}
     >
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between text-xs">
         <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setRoute("components")}
+          <div
+            className="w-8 h-8 rounded-full flex items-center justify-center"
+            style={{
+              background: TOKENS.colors.surfaceElev,
+              boxShadow: TOKENS.shadow.glowTeal,
+            }}
           >
+            ▶️
+          </div>
+          <div className="opacity-80">Player controls coming soon…</div>
+        </div>
+        <div className="flex items-center gap-6">
+          <Button size="sm" variant="ghost" onClick={() => setRoute("components")}>
             Components
           </Button>
           <Button size="sm" variant="ghost" onClick={() => setRoute("notes")}>
             Handoff Notes
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() =>
-              toasts.push({
-                title: "Network: Connecting to server…",
-                icon: "🌐",
-              })
-            }
-          >
-            Simulate Network
-          </Button>
         </div>
-        <div className="opacity-70">© 2025 Taste Battles</div>
       </div>
     </div>
   );
@@ -1495,8 +1454,70 @@ export default function App() {
       {route === "components" && <ComponentsGallery />}
       {route === "notes" && <Notes />}
       <ToastViewport />
-      <Footer />
+      <PlayerBar />
+      {/* Debug panel kept intact for demos */}
       <DebugPanel />
     </div>
   );
+
+  // Debug Panel (kept identical except color polish)
+  function DebugPanel() {
+    const [open, setOpen] = useState(true);
+    if (route !== "match") return null;
+    return (
+      <div className="fixed right-4 bottom-20 z-40">
+        <div className="mb-2 flex justify-end">
+          <button
+            onClick={() => setOpen((o) => !o)}
+            className="w-10 h-10 rounded-full flex items-center justify-center text-xl"
+            style={{ background: TOKENS.colors.primary, boxShadow: TOKENS.shadow.lift }}
+          >
+            ⚙️
+          </button>
+        </div>
+        {open && (
+          <Card className="w-80">
+            <div className="text-sm font-semibold mb-2">Debug</div>
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <Button size="sm" variant="secondary" onClick={() => setMState((s) => ({ ...s, phase: "playingA" }))}>
+                Playing A
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setMState((s) => ({ ...s, phase: "playingB" }))}>
+                Playing B
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setMState((s) => ({ ...s, phase: "voting" }))}>
+                Voting
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setMState((s) => ({ ...s, phase: "results" }))}>
+                Results
+              </Button>
+            </div>
+            <div className="grid grid-cols-3 gap-2 mb-2">
+              <Button size="sm" onClick={() => vote("A")}>
+                +A
+              </Button>
+              <Button size="sm" onClick={() => vote("B")}>
+                +B
+              </Button>
+              <Button
+                size="sm"
+                variant="danger"
+                onClick={() => setMState((s) => ({ ...s, votesA: 0, votesB: 0 }))}
+              >
+                Clear
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Button size="sm" onClick={finalizeRound}>
+                Next Round
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setMState((s) => ({ ...s, phase: "complete" }))}>
+                Complete
+              </Button>
+            </div>
+          </Card>
+        )}
+      </div>
+    );
+  }
 }
