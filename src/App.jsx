@@ -394,6 +394,93 @@ function safeYouTubeId(url, fallbackId) {
 /** ------------------------------------------------------------------------
  * App
  * --------------------------------------------------------------------- */
+/** ---------------------------------------------
+ * Lightweight YouTube IFrame loader + player
+ * No extra dependencies. Autoplay starts muted
+ * (browsers require a user gesture to unmute).
+ * ------------------------------------------ */
+let YT_SCRIPT_ADDED = false;
+function loadYouTubeAPI() {
+  return new Promise((resolve) => {
+    if (window.YT?.Player) return resolve(window.YT);
+    if (!YT_SCRIPT_ADDED) {
+      const tag = document.createElement("script");
+      tag.src = "https://www.youtube.com/iframe_api";
+      document.head.appendChild(tag);
+      YT_SCRIPT_ADDED = true;
+    }
+    window.onYouTubeIframeAPIReady = () => resolve(window.YT);
+  });
+}
+
+function YouTubePlayer({ videoId, startSeconds = 0, playing, muted = true, onPlaying }) {
+  const elRef = React.useRef(null);
+  const playerRef = React.useRef(null);
+  const readyRef = React.useRef(false);
+
+  // create player once
+  React.useEffect(() => {
+    let mounted = true;
+    loadYouTubeAPI().then((YT) => {
+      if (!mounted) return;
+      if (playerRef.current) return;
+      playerRef.current = new YT.Player(elRef.current, {
+        height: "0", // audio-only footprint (no visual needed)
+        width: "0",
+        videoId,
+        playerVars: {
+          controls: 0,
+          disablekb: 1,
+          rel: 0,
+          modestbranding: 1,
+          playsinline: 1,
+          start: Math.max(0, Math.floor(startSeconds)),
+        },
+        events: {
+          onReady: () => {
+            readyRef.current = true;
+            try {
+              playerRef.current?.mute();
+              playerRef.current?.seekTo(startSeconds, true);
+              if (playing) playerRef.current?.playVideo();
+            } catch {}
+          },
+          onStateChange: (e) => {
+            // 1 = PLAYING
+            if (e?.data === 1) onPlaying?.();
+          },
+        },
+      });
+    });
+    return () => {
+      mounted = false;
+      try {
+        playerRef.current?.destroy();
+      } catch {}
+      playerRef.current = null;
+    };
+  }, [videoId]);
+
+  // respond to prop changes
+  React.useEffect(() => {
+    const p = playerRef.current;
+    if (!readyRef.current || !p) return;
+    try {
+      // keep muted unless user unmutes (see UI below)
+      if (muted) p.mute();
+      // always cue to hook when (re)starting play
+      if (playing) {
+        p.seekTo(startSeconds, true);
+        p.playVideo();
+      } else {
+        p.pauseVideo();
+      }
+    } catch {}
+  }, [playing, startSeconds, muted]);
+
+  return <div ref={elRef} aria-hidden />;
+}
+
 export default function App() {
   // Auth state
   const [session, setSession] = useState(null);
@@ -1160,14 +1247,31 @@ export default function App() {
     const ytId = t.source === "youtube" ? safeYouTubeId(t.url, YT[idx]) : null;
     const thumb = ytId ? ytThumb(ytId) : undefined;
 
+    // one-time user gesture to allow unmute
+    const [soundOn, setSoundOn] = React.useState(false);
+    const [hasPlayed, setHasPlayed] = React.useState(false);
+
     return (
       <Card>
         <div className="flex items-center justify-between mb-3">
           <div className="text-sm" style={{ color: TOKENS.colors.muted }}>
             Player {who}
           </div>
-          <Badge tone={active ? "info" : "neutral"}>{active ? "Playing" : "Standby"}</Badge>
+          <div className="flex items-center gap-2">
+            {active && ytId && (
+              <Button
+                size="sm"
+                variant={soundOn ? "secondary" : "primary"}
+                onClick={() => setSoundOn((v) => !v)}
+                title={soundOn ? "Mute preview" : "Enable sound"}
+              >
+                {soundOn ? "🔇 Mute" : "🔊 Enable sound"}
+              </Button>
+            )}
+            <Badge tone={active ? "info" : "neutral"}>{active ? "Playing" : "Standby"}</Badge>
+          </div>
         </div>
+
         <div className="flex gap-4 items-center">
           <div className="w-28 h-16 rounded-lg overflow-hidden bg-black flex-shrink-0 relative">
             {thumb ? (
@@ -1194,6 +1298,17 @@ export default function App() {
           </div>
           <div className="text-sm opacity-80">Votes: {votes}</div>
         </div>
+
+        {/* Audio-only player mounts when this side is ACTIVE */}
+        {active && ytId && (
+          <YouTubePlayer
+            videoId={ytId}
+            startSeconds={Number(t.hook_start_sec || 0)}
+            playing={true}
+            muted={!soundOn}
+            onPlaying={() => setHasPlayed(true)}
+          />
+        )}
       </Card>
     );
   }
