@@ -470,27 +470,56 @@ function YouTubePlayer({ videoId, startSeconds = 0, playing, muted = true, onPla
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoId]);
 
-  // respond to prop changes
-  React.useEffect(() => {
-    const p = playerRef.current;
-    if (!readyRef.current || !p) return;
-    try {
-      if (muted) {
-        p.mute();
-      } else {
-        // 👇 IMPORTANT: explicitly unmute when user enables sound
-        p.unMute();
-      }
-      if (playing) {
-        p.seekTo(startSeconds, true);
-        // On a user gesture (your Enable sound click) this will be allowed
-        p.playVideo();
-      } else {
-        p.pauseVideo();
-      }
-    } catch {}
-  }, [playing, startSeconds, muted]);
+// Track previous values to avoid unnecessary seeks
+const prevPlayingRef = React.useRef(false);
+const lastVideoIdRef = React.useRef(null);
+const lastStartRef = React.useRef(null);
 
+// 1) Muting/unmuting should NOT seek or restart
+React.useEffect(() => {
+  const p = playerRef.current;
+  if (!readyRef.current || !p) return;
+  try {
+    if (muted) p.mute();
+    else p.unMute();
+  } catch {}
+}, [muted]);
+
+// 2) Play/pause should not seek unless we just transitioned to playing
+React.useEffect(() => {
+  const p = playerRef.current;
+  if (!readyRef.current || !p) return;
+
+  const wasPlaying = prevPlayingRef.current;
+  try {
+    if (playing && !wasPlaying) {
+      // just transitioned to playing — resume from current time (no seek)
+      p.playVideo();
+    } else if (!playing && wasPlaying) {
+      p.pauseVideo();
+    }
+  } catch {} finally {
+    prevPlayingRef.current = playing;
+  }
+}, [playing]);
+
+// 3) If the video or hook start changes (new round), seek once
+React.useEffect(() => {
+  const p = playerRef.current;
+  if (!readyRef.current || !p) return;
+
+  const videoChanged = lastVideoIdRef.current !== videoId;
+  const startChanged = lastStartRef.current !== startSeconds;
+
+  if (videoChanged || startChanged) {
+    try {
+      p.seekTo(Math.max(0, Math.floor(startSeconds)), true);
+      if (playing) p.playVideo();
+    } catch {}
+    lastVideoIdRef.current = videoId;
+    lastStartRef.current = startSeconds;
+  }
+}, [videoId, startSeconds, playing]);
   // Keep the node in DOM; we’ll hide it via size after first play
   return (
     <div
