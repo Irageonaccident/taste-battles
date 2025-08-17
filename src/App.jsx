@@ -417,6 +417,7 @@ function YouTubePlayer({ videoId, startSeconds = 0, playing, muted = true, onPla
   const elRef = React.useRef(null);
   const playerRef = React.useRef(null);
   const readyRef = React.useRef(false);
+  const [hasPlayed, setHasPlayed] = React.useState(false);
 
   // create player once
   React.useEffect(() => {
@@ -425,8 +426,9 @@ function YouTubePlayer({ videoId, startSeconds = 0, playing, muted = true, onPla
       if (!mounted) return;
       if (playerRef.current) return;
       playerRef.current = new YT.Player(elRef.current, {
-        height: "0", // audio-only footprint (no visual needed)
-        width: "0",
+        // 👇 Start slightly visible so browsers allow audio on first interaction.
+        height: hasPlayed ? "0" : "90",     // 160x90 (16:9 thumbnail-ish)
+        width:  hasPlayed ? "0" : "160",
         videoId,
         playerVars: {
           controls: 0,
@@ -447,18 +449,25 @@ function YouTubePlayer({ videoId, startSeconds = 0, playing, muted = true, onPla
           },
           onStateChange: (e) => {
             // 1 = PLAYING
-            if (e?.data === 1) onPlaying?.();
+            if (e?.data === 1) {
+              setHasPlayed(true);
+              // collapse to audio-only footprint after first play
+              try {
+                playerRef.current?.setSize(0, 0);
+              } catch {}
+              onPlaying?.();
+            }
           },
         },
       });
     });
     return () => {
       mounted = false;
-      try {
-        playerRef.current?.destroy();
-      } catch {}
+      try { playerRef.current?.destroy(); } catch {}
       playerRef.current = null;
     };
+    // NOTE: hasPlayed is intentionally NOT a dep here; we resize via setSize() when play starts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoId]);
 
   // respond to prop changes
@@ -466,11 +475,15 @@ function YouTubePlayer({ videoId, startSeconds = 0, playing, muted = true, onPla
     const p = playerRef.current;
     if (!readyRef.current || !p) return;
     try {
-      // keep muted unless user unmutes (see UI below)
-      if (muted) p.mute();
-      // always cue to hook when (re)starting play
+      if (muted) {
+        p.mute();
+      } else {
+        // 👇 IMPORTANT: explicitly unmute when user enables sound
+        p.unMute();
+      }
       if (playing) {
         p.seekTo(startSeconds, true);
+        // On a user gesture (your Enable sound click) this will be allowed
         p.playVideo();
       } else {
         p.pauseVideo();
@@ -478,7 +491,19 @@ function YouTubePlayer({ videoId, startSeconds = 0, playing, muted = true, onPla
     } catch {}
   }, [playing, startSeconds, muted]);
 
-  return <div ref={elRef} aria-hidden />;
+  // Keep the node in DOM; we’ll hide it via size after first play
+  return (
+    <div
+      ref={elRef}
+      aria-hidden
+      style={{
+        // keep it visually tucked away; it will be 160x90 only until first play event fires
+        position: "absolute",
+        left: "-9999px",
+        top: "-9999px",
+      }}
+    />
+  );
 }
 
 export default function App() {
