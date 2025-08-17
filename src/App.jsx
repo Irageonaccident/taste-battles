@@ -681,6 +681,11 @@ export default function App() {
             active={route === "leaderboard"}
             onClick={() => setRoute("leaderboard")}
           />
+          <NavLink
+            label="Library"
+            active={route === "library"}
+            onClick={() => setRoute("library")}
+          />
           <NavLink label="Profile" active={route === "profile"} onClick={() => setRoute("profile")} />
           <NavLink
             label={authed ? "Sign out" : "Sign in"}
@@ -1468,6 +1473,84 @@ export default function App() {
     </div>
   );
 
+  const Library = () => {
+    const [query, setQuery] = useState("");
+    const [creating, setCreating] = useState(false);
+
+    const demoPlaylists = [
+      { id: "p1", name: "Hook Heaven", count: 12, updated: "2d" },
+      { id: "p2", name: "Battle Bangers", count: 8, updated: "5d" },
+      { id: "p3", name: "Chill Hooks", count: 18, updated: "1w" },
+    ];
+
+    return (
+      <div className="max-w-6xl mx-auto px-4 pt-10 pb-24 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="text-xl font-semibold">Library</div>
+          <div className="flex items-center gap-2">
+            <Button onClick={() => setCreating(true)}>New Playlist</Button>
+            <IntegrationTag label="playlist:create" />
+          </div>
+        </div>
+
+        <Card>
+          <div className="grid md:grid-cols-3 gap-4 items-end">
+            <div className="md:col-span-2">
+              <Input
+                label="Search"
+                placeholder="Find playlists or tracks…"
+                value={query}
+                onChange={setQuery}
+                helper="Type to filter locally (stub)"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={() => setQuery("")}>Clear</Button>
+              <Button variant="ghost" onClick={() => toasts.push({ title: "Import from Spotify (stub)", icon: "🎣" })}>Import</Button>
+            </div>
+          </div>
+        </Card>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {demoPlaylists
+            .filter(p => p.name.toLowerCase().includes(query.toLowerCase()))
+            .map(p => (
+              <Card key={p.id}>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="font-medium">{p.name}</div>
+                    <div className="text-xs opacity-70">{p.count} tracks • updated {p.updated} ago</div>
+                  </div>
+                  <Badge tone="neutral">Draft</Badge>
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <Button size="sm" onClick={() => toasts.push({ title: `Open ${p.name} (stub)`, icon: "📂" })}>Open</Button>
+                  <Button size="sm" variant="secondary" onClick={() => toasts.push({ title: "Rename (stub)", icon: "✏️" })}>Rename</Button>
+                  <Button size="sm" variant="ghost" onClick={() => toasts.push({ title: "Delete (stub)", icon: "🗑️" })}>Delete</Button>
+                </div>
+              </Card>
+            ))}
+        </div>
+
+        {creating && (
+          <div className="fixed inset-0 flex items-center justify-center" style={{ background: TOKENS.colors.overlay }}>
+            <Card className="w-[90%] max-w-md">
+              <div className="text-lg font-semibold mb-1">Create Playlist</div>
+              <div className="text-sm opacity-80 mb-4">Lightweight scaffold — wire to DB later.</div>
+              <div className="space-y-3">
+                <Input label="Name" placeholder="e.g., Sloppy Songs — Season 1" />
+                <div className="flex gap-2 justify-end">
+                  <Button variant="ghost" onClick={() => setCreating(false)}>Cancel</Button>
+                  <Button onClick={() => { setCreating(false); toasts.push({ title: "Playlist created (stub)", icon: "✅" }); }}>Create</Button>
+                </div>
+              </div>
+            </Card>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const ComponentsGallery = () => (
     <div className="max-w-5xl mx-auto px-4 pt-10 pb-24 space-y-6">
       <div className="text-xl font-semibold">Components</div>
@@ -1620,6 +1703,7 @@ export default function App() {
       {route === "results" && <Results />}
       {route === "profile" && <Profile />}
       {route === "leaderboard" && <Leaderboard />}
+      {route === "library" && <Library />}
       {route === "components" && <ComponentsGallery />}
       {route === "notes" && <Notes />}
       <ToastViewport />
