@@ -613,6 +613,51 @@ export default function App() {
       sub?.subscription?.unsubscribe?.();
     };
   }, []);
+  // Ensure a profile row exists for the logged-in user (create once if missing)
+useEffect(() => {
+  const u = session?.user;
+  if (!u) return;
+
+  let ignore = false;
+
+  (async () => {
+    // Check if profile exists
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("id", u.id)
+      .maybeSingle();
+
+    if (ignore) return;
+
+    if (error) {
+      console.error("profiles select error:", error);
+      return;
+    }
+
+    if (!data) {
+      // Pick a reasonable display name from Google metadata / email
+      const displayName =
+        u.user_metadata?.full_name ||
+        u.user_metadata?.name ||
+        (u.email ? u.email.split("@")[0] : "User");
+
+      const { error: insertError } = await supabase
+        .from("profiles")
+        .insert({ id: u.id, display_name: displayName });
+
+      if (insertError) {
+        console.error("profiles insert error:", insertError);
+      } else {
+        toasts.push({ title: "Profile created", icon: "✨" });
+      }
+    }
+  })();
+
+  return () => {
+    ignore = true;
+  };
+}, [session?.user?.id]); // run only when a user id appears (login) or changes
 
   /** ---------------------------------------------
    * Header
