@@ -541,6 +541,12 @@ export default function App() {
   const [authed, setAuthed] = useState(false);
   const toasts = useToasts();
 
+  // Profile display name (fetched from Supabase)
+  const [profileName, setProfileName] = useState(null);
+  const profileId = session?.user?.id || null;
+
+  const showToast = (title, icon = "🔔") => toasts.push({ title, icon });
+
   const toast = (title, icon) => toasts.push({ title, icon });
 
   async function sendMagicLink(email) {
@@ -613,6 +619,29 @@ export default function App() {
       sub?.subscription?.unsubscribe?.();
     };
   }, []);
+  // Fetch profile.display_name when a user session exists
+  useEffect(() => {
+    let ignore = false;
+    async function loadProfileName() {
+      if (!profileId) {
+        setProfileName(null);
+        return;
+      }
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('display_name')
+        .eq('id', profileId)
+        .maybeSingle();
+      if (ignore) return;
+      if (error) {
+        console.error('loadProfileName error:', error);
+        return;
+      }
+      setProfileName(data?.display_name || null);
+    }
+    loadProfileName();
+    return () => { ignore = true; };
+  }, [profileId]);
   // Ensure a profile row exists for the logged-in user (create once if missing)
 useEffect(() => {
   const u = session?.user;
@@ -720,26 +749,29 @@ useEffect(() => {
           </div>
         </div>
         <nav className="flex items-center gap-2 text-sm">
+          {authed && (
+            <span
+              className="px-2 py-1 rounded-lg"
+              style={{
+                border: `1px solid rgba(28,201,182,0.35)`,
+                background: "rgba(17,100,102,0.12)",
+              }}
+            >
+              Hi, {profileName || 'Guest'}
+            </span>
+          )}
           <NavLink label="Home" active={route === "home"} onClick={() => setRoute("home")} />
-          <NavLink
-            label="Leaderboard"
-            active={route === "leaderboard"}
-            onClick={() => setRoute("leaderboard")}
-          />
-          <NavLink
-            label="Library"
-            active={route === "library"}
-            onClick={() => setRoute("library")}
-          />
+          <NavLink label="Leaderboard" active={route === "leaderboard"} onClick={() => setRoute("leaderboard")} />
+          <NavLink label="Library" active={route === "library"} onClick={() => setRoute("library")} />
           <NavLink label="Profile" active={route === "profile"} onClick={() => setRoute("profile")} />
           <NavLink
             label={authed ? "Sign out" : "Sign in"}
             onClick={async () => {
               if (authed) {
                 await realSignOut();
-                toast("Signed out", "👋");
+                showToast('Signed out', '👋');
               } else {
-                setRoute("auth");
+                setRoute('auth');
               }
             }}
           />
@@ -1420,7 +1452,7 @@ useEffect(() => {
   const Results = () => (
     <div className="max-w-3xl mx-auto px-4 pt-12 pb-24">
       <Card>
-        <div className="text-2xl font-semibold mb-2">Winner: Test User 1 🎉</div>
+        <div className="text-2xl font-semibold mb-2">Winner: {profileName || 'You'} 🎉</div>
         <div className="text-sm opacity-80 mb-4">Elo change +12 / −8</div>
         <div className="flex gap-2">
           <Button onClick={() => setRoute("home")}>Back to Home</Button>
@@ -1432,48 +1464,97 @@ useEffect(() => {
     </div>
   );
 
-  const Profile = () => (
-    <div className="max-w-3xl mx-auto px-4 pt-10 pb-24 space-y-4">
-      <Card>
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm opacity-70">Rating</div>
-            <div className="text-3xl font-semibold">
-              {user.rating} <span className="text-sm opacity-60">({user.provisional_count}/10)</span>
+  const Profile = () => {
+    const [editing, setEditing] = useState(false);
+    const [nameInput, setNameInput] = useState(profileName || "");
+    useEffect(() => { setNameInput(profileName || ""); }, [profileName]);
+
+    async function saveName() {
+      if (!profileId) return showToast('You must be signed in', '⚠️');
+      const trimmed = (nameInput || '').trim();
+      if (!trimmed) return showToast('Name cannot be empty', '⚠️');
+      const { error } = await supabase
+        .from('profiles')
+        .update({ display_name: trimmed })
+        .eq('id', profileId);
+      if (error) {
+        console.error('saveName error:', error);
+        return showToast('Failed to update name', '⚠️');
+      }
+      setProfileName(trimmed);
+      setEditing(false);
+      showToast('Name updated', '✅');
+    }
+
+    return (
+      <div className="max-w-3xl mx-auto px-4 pt-10 pb-24 space-y-4">
+        <Card>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm" style={{ color: TOKENS.colors.muted }}>Display name</div>
+              <div className="text-2xl font-semibold">
+                {editing ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      className="rounded-lg border px-3 py-2 text-sm"
+                      style={{
+                        color: TOKENS.colors.text,
+                        background: 'rgba(15,22,27,0.9)',
+                        borderColor: TOKENS.colors.border,
+                      }}
+                      value={nameInput}
+                      onChange={(e) => setNameInput(e.target.value)}
+                    />
+                    <Button size="sm" onClick={saveName}>Save</Button>
+                    <Button size="sm" variant="ghost" onClick={() => { setEditing(false); setNameInput(profileName || ''); }}>Cancel</Button>
+                  </div>
+                ) : (
+                  <span>{profileName || 'You'}</span>
+                )}
+              </div>
             </div>
+            {!editing && (
+              <Button variant="secondary" onClick={() => setEditing(true)}>Edit Name</Button>
+            )}
           </div>
-          <Badge tone="warning">Provisional</Badge>
-        </div>
-      </Card>
-      <Card>
-        <div className="text-lg font-semibold mb-2">Recent Matches</div>
-        <div className="space-y-2 text-sm">
-          {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="flex items-center justify-between border rounded-xl p-3"
-              style={{
-                borderColor: TOKENS.colors.border,
-                background: "#0F1623",
-              }}
-            >
-              <span>vs Test User {i + 1} • 2025-08-0{i} • Win</span>
-              <span className="opacity-80">+12</span>
+        </Card>
+
+        <Card>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm opacity-70">Rating</div>
+              <div className="text-3xl font-semibold">
+                {user.rating} <span className="text-sm opacity-60">({user.provisional_count}/10)</span>
+              </div>
             </div>
-          ))}
-        </div>
-        <div className="mt-3 flex gap-2">
-          <Button onClick={() => setRoute("lobby")}>Find New Match</Button>
-          <Button
-            variant="secondary"
-            onClick={() => toasts.push({ title: "Name updated", icon: "✏️" })}
-          >
-            Edit Name
-          </Button>
-        </div>
-      </Card>
-    </div>
-  );
+            <Badge tone="warning">Provisional</Badge>
+          </div>
+        </Card>
+
+        <Card>
+          <div className="text-lg font-semibold mb-2">Recent Matches</div>
+          <div className="space-y-2 text-sm">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between border rounded-xl p-3"
+                style={{ borderColor: TOKENS.colors.border, background: "#0F1623" }}
+              >
+                <span>vs Test User {i + 1} • 2025-08-0{i} • Win</span>
+                <span className="opacity-80">+12</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex gap-2">
+            <Button onClick={() => setRoute('lobby')}>Find New Match</Button>
+            {!editing && (
+              <Button variant="secondary" onClick={() => setEditing(true)}>Edit Name</Button>
+            )}
+          </div>
+        </Card>
+      </div>
+    );
+  };
 
   const Leaderboard = () => (
     <div className="max-w-3xl mx-auto px-4 pt-10 pb-24 space-y-4">
